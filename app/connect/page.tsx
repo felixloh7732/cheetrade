@@ -39,7 +39,7 @@ export default function ConnectPage() {
       const endpoint = new URL("/api/mt5/connect", window.location.origin).toString();
       const response = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}` }, body: JSON.stringify({ brokerServer: data.get("server"), accountNumber: data.get("account"), investorPassword: data.get("password") }) });
       const result = await response.json().catch(() => ({}));
-      setMessage(response.ok ? "Connection saved. Trade sync will begin when the MT5 importer is activated." : result.error ?? "Connection could not be saved. Please try again later.");
+      setMessage(response.ok ? "Connection saved. Open /sync to set up your MT5 desktop helper." : result.error ?? "Connection could not be saved. Please try again later.");
     } catch (error) {
       const detail = error instanceof Error ? error.message : "Unknown browser error";
       setMessage(`The browser could not send the secure request: ${detail}`);
