@@ -14,8 +14,8 @@ export default function ConnectPage() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => { fetch("/api/config").then((r) => r.ok ? r.json() : null).then((config) => {
-    if (!config) return setMessage("Cheetrade is still being configured. Please try again shortly.");
+  useEffect(() => { fetch("/api/config").then(async (r) => ({ ok: r.ok, body: await r.json() })).then(({ ok, body: config }) => {
+    if (!ok) return setMessage(config.error ?? "Cheetrade is still being configured. Please try again shortly.");
     const supabase = createClient(config.url, config.key); setClient(supabase);
     supabase.auth.getUser().then(({ data }) => setUser(data.user));
     const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null));

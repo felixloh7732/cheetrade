@@ -49,7 +49,8 @@ const worker = {
     const url = new URL(request.url);
 
     if (url.pathname === "/api/config") {
-      if (!env.SUPABASE_URL || !env.SUPABASE_PUBLISHABLE_KEY) return json({ error: "Authentication is not configured." }, 503);
+      const missing = [!env.SUPABASE_URL && "SUPABASE_URL", !env.SUPABASE_PUBLISHABLE_KEY && "SUPABASE_PUBLISHABLE_KEY"].filter(Boolean);
+      if (missing.length) return json({ error: `Missing Cloudflare setting: ${missing.join(", ")}.`, missing }, 503);
       return json({ url: env.SUPABASE_URL, key: env.SUPABASE_PUBLISHABLE_KEY });
     }
 
