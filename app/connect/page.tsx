@@ -29,12 +29,13 @@ export default function ConnectPage() {
   }
   async function connect(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const form = event.currentTarget;
     if (!client) return setMessage("Secure sign-in is still loading. Please wait a moment and try again.");
     setBusy(true); setMessage("Saving your encrypted read-only connection…");
     try {
       const session = (await client.auth.getSession()).data.session;
       if (!session) { setMessage("Your session expired. Please sign in again."); return; }
-      const data = new FormData(event.currentTarget);
+      const data = new FormData(form);
       const endpoint = new URL("/api/mt5/connect", window.location.origin).toString();
       const response = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}` }, body: JSON.stringify({ brokerServer: data.get("server"), accountNumber: data.get("account"), investorPassword: data.get("password") }) });
       const result = await response.json().catch(() => ({}));
