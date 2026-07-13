@@ -1,29 +1,46 @@
 "use client";
 
-import { createClient, SupabaseClient, User } from "@supabase/supabase-js";
+import { createClient, User } from "@supabase/supabase-js";
 import { useEffect, useMemo, useState } from "react";
 
-type Deal = { id: string; symbol: string; side: "long" | "short"; volume: number; price: number; profit: number; commission: number; swap: number; fee: number; occurred_at: string };
-const shell: React.CSSProperties = { maxWidth: 1120, margin: "0 auto", padding: "44px 24px 80px" };
-const card: React.CSSProperties = { background: "#181725", border: "1px solid #36334e", borderRadius: 14, padding: 22 };
-const tableCell: React.CSSProperties = { padding: "14px 10px", borderBottom: "1px solid #2a283d" };
-function money(value: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value); }
+type Deal = { id: string; symbol: string; side: "long" | "short"; volume: number; profit: number; commission: number; swap: number; fee: number; occurred_at: string };
+const net = (deal: Deal) => Number(deal.profit) + Number(deal.commission) + Number(deal.swap) + Number(deal.fee);
+const key = (date: Date) => date.toISOString().slice(0, 10);
+const money = (value: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value);
 
 export default function JournalPage() {
   const [user, setUser] = useState<User | null>(null);
   const [deals, setDeals] = useState<Deal[]>([]);
-  const [message, setMessage] = useState("Loading your private journal…");
+  const [message, setMessage] = useState("Loading your dashboard…");
+  const [month, setMonth] = useState<Date | null>(null);
+
   useEffect(() => { fetch("/api/config").then(async (r) => ({ ok: r.ok, body: await r.json() })).then(({ ok, body }) => {
     if (!ok) return setMessage(body.error ?? "Cheetrade is still being configured.");
-    const supabase: SupabaseClient = createClient(body.url, body.key);
+    const supabase = createClient(body.url, body.key);
     supabase.auth.getUser().then(async ({ data }) => {
-      setUser(data.user); if (!data.user) return setMessage("Sign in through the connection page to see your journal.");
-      const { data: rows, error } = await supabase.from("mt5_deals").select("id,symbol,side,volume,price,profit,commission,swap,fee,occurred_at").order("occurred_at", { ascending: false });
-      if (error) return setMessage(error.message); setDeals((rows ?? []) as Deal[]); setMessage("");
+      setUser(data.user); if (!data.user) return setMessage("Sign in through the connection page to open your dashboard.");
+      const { data: rows, error } = await supabase.from("mt5_deals").select("id,symbol,side,volume,profit,commission,swap,fee,occurred_at").order("occurred_at", { ascending: true });
+      if (error) return setMessage(error.message);
+      const loaded = (rows ?? []) as Deal[]; setDeals(loaded); setMonth(loaded.length ? new Date(loaded[loaded.length - 1].occurred_at) : new Date()); setMessage("");
     });
-  }).catch(() => setMessage("Could not load your private journal.")); }, []);
-  const metrics = useMemo(() => { const values = deals.map((deal) => Number(deal.profit) + Number(deal.commission) + Number(deal.swap) + Number(deal.fee)); const net = values.reduce((sum, value) => sum + value, 0); const wins = values.filter((value) => value > 0).length; const grossWin = values.filter((value) => value > 0).reduce((sum, value) => sum + value, 0); const grossLoss = Math.abs(values.filter((value) => value < 0).reduce((sum, value) => sum + value, 0)); return { net, winRate: deals.length ? wins / deals.length * 100 : 0, factor: grossLoss ? grossWin / grossLoss : grossWin ? Infinity : 0 }; }, [deals]);
-  return <main style={{ minHeight: "100vh", background: "radial-gradient(circle at 86% 0%,#302b71,transparent 38%),#0c0b14", color: "#f4f3ff" }}><div style={shell}><nav style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 48 }}><a href="/" style={{ color: "#b9b7ff", textDecoration: "none", fontWeight: 800 }}>← cheetrade</a><span style={{ color: "#83e2a6", fontSize: 13 }}>{user ? user.email : "Private journal"}</span></nav><p style={{ color: "#b9b7ff", fontSize: 11, letterSpacing: 1.5, fontWeight: 800 }}>YOUR JOURNAL</p><h1 style={{ fontSize: "clamp(38px,6vw,64px)", letterSpacing: -3, margin: "8px 0" }}>Your trading, <em style={{ color: "#aaa8ff", fontWeight: 400 }}>in focus.</em></h1><p style={{ color: "#b0aec0", marginBottom: 32 }}>{deals.length ? `${deals.length} closed MT5 deals imported` : "Your imported MT5 history will appear here."}</p>{message ? <div style={card}>{message}</div> : <><section style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 14, marginBottom: 18 }}><Metric label="Net P&L" value={money(metrics.net)} good={metrics.net >= 0} /><Metric label="Win rate" value={`${metrics.winRate.toFixed(1)}%`} good={metrics.winRate >= 50} /><Metric label="Profit factor" value={metrics.factor === Infinity ? "∞" : metrics.factor.toFixed(2)} good={metrics.factor >= 1} /></section><section style={card}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}><div><b>Closed trades</b><p style={{ color: "#9995aa", fontSize: 13, margin: "5px 0" }}>Read-only import from your XM MT5 desktop app</p></div><a href="/sync" style={{ color: "#b9b7ff", fontWeight: 700 }}>Sync again →</a></div><div style={{ overflowX: "auto" }}><table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}><thead style={{ color: "#9995aa", textAlign: "left" }}><tr><th style={tableCell}>Instrument</th><th style={tableCell}>Side</th><th style={tableCell}>Volume</th><th style={tableCell}>Closed</th><th style={{ ...tableCell, textAlign: "right" }}>Net P&L</th></tr></thead><tbody>{deals.map((deal) => { const net = Number(deal.profit) + Number(deal.commission) + Number(deal.swap) + Number(deal.fee); return <tr key={deal.id}><td style={tableCell}><b>{deal.symbol}</b></td><td style={{ ...tableCell, color: deal.side === "long" ? "#83e2a6" : "#f0a6b7" }}>{deal.side}</td><td style={tableCell}>{deal.volume}</td><td style={{ ...tableCell, color: "#b0aec0" }}>{new Date(deal.occurred_at).toLocaleString()}</td><td style={{ ...tableCell, textAlign: "right", color: net >= 0 ? "#83e2a6" : "#f0a6b7", fontWeight: 800 }}>{money(net)}</td></tr>; })}</tbody></table></div></section></>}</div></main>;
+  }).catch(() => setMessage("Could not load your dashboard.")); }, []);
+
+  const stats = useMemo(() => {
+    const values = deals.map(net); const result = values.reduce((sum, value) => sum + value, 0); const wins = values.filter((value) => value > 0).length;
+    let streak = 0; for (let i = values.length - 1; i >= 0; i--) { if ((values[i] >= 0) === (values[values.length - 1] >= 0)) streak++; else break; }
+    return { result, winRate: deals.length ? wins / deals.length * 100 : 0, average: deals.length ? result / deals.length : 0, streak, green: values.at(-1) ?? 0 };
+  }, [deals]);
+  const daily = useMemo(() => deals.reduce<Record<string, { pnl: number; count: number }>>((all, deal) => { const day = key(new Date(deal.occurred_at)); const current = all[day] ?? { pnl: 0, count: 0 }; current.pnl += net(deal); current.count++; all[day] = current; return all; }, {}), [deals]);
+  const curve = useMemo(() => { let cumulative = 0; return deals.map((deal) => cumulative += net(deal)); }, [deals]);
+  const calendar = useMemo(() => {
+    const active = month ?? new Date(); const start = new Date(active.getFullYear(), active.getMonth(), 1); const first = new Date(start); first.setDate(1 - ((start.getDay() + 6) % 7));
+    return Array.from({ length: 42 }, (_, index) => { const day = new Date(first); day.setDate(first.getDate() + index); return day; });
+  }, [month]);
+  const activeMonth = month ?? new Date();
+  const chartMin = Math.min(0, ...curve), chartMax = Math.max(0, ...curve), spread = chartMax - chartMin || 1;
+  const changeMonth = (delta: number) => setMonth(new Date(activeMonth.getFullYear(), activeMonth.getMonth() + delta, 1));
+
+  return <main className="trade-app"><aside className="app-sidebar"><a href="/" className="app-logo"><i>c</i></a><button className="side-add" aria-label="Import MT5 history" onClick={() => location.assign("/sync")}>+</button><a className="side-active" href="/journal" aria-label="Dashboard">▦</a><a href="/sync" aria-label="Sync MT5">↻</a><span className="side-bottom">⚙</span></aside><div className="app-content"><header className="app-topbar"><div><b>Dashboard</b><small>{deals.length ? `Last import · ${new Date(deals[deals.length - 1].occurred_at).toLocaleString()}` : "Your private MT5 journal"}</small></div><div className="top-actions"><button>⌄ Filters</button><button>◷ All time</button><button>◉ All accounts</button><span className="user-dot">{user?.email?.[0]?.toUpperCase() ?? "C"}</span></div></header>{message ? <div className="dashboard-message">{message}</div> : <><section className="metric-grid"><DashMetric label="Result" value={money(stats.result)} sub={`${deals.length} trades`} good={stats.result >= 0} /><DashMetric label="Win rate" value={`${stats.winRate.toFixed(0)}%`} sub={`${deals.filter((deal) => net(deal) > 0).length} winning trades`} good={stats.winRate >= 50} /><DashMetric label="Average P&L" value={money(stats.average)} sub="per closed deal" good={stats.average >= 0} /><DashMetric label="Current trade streak" value={`${stats.streak} trade${stats.streak === 1 ? "" : "s"}`} sub={stats.green >= 0 ? "positive streak" : "negative streak"} good={stats.green >= 0} /></section><section className="dashboard-grid"><div className="calendar-card"><div className="panel-title"><div><button onClick={() => changeMonth(-1)}>‹</button><b>{activeMonth.toLocaleString("en-US", { month: "long", year: "numeric" })}</b><button onClick={() => changeMonth(1)}>›</button></div><span>Monthly result <strong className={Object.values(daily).reduce((sum, day) => sum + day.pnl, 0) >= 0 ? "positive" : "negative"}>{money(Object.values(daily).reduce((sum, day) => sum + day.pnl, 0))}</strong></span></div><div className="weekdays">{["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => <span key={day}>{day}</span>)}</div><div className="calendar-grid">{calendar.map((day) => { const item = daily[key(day)]; const inMonth = day.getMonth() === activeMonth.getMonth(); return <div className={`calendar-day ${!inMonth ? "muted" : ""} ${item ? item.pnl >= 0 ? "gain" : "loss" : ""}`} key={day.toISOString()}><small>{day.getDate()}</small>{item && <><b>{money(item.pnl)}</b><span>{item.count} trade{item.count === 1 ? "" : "s"}</span></>}</div>; })}</div></div><div className="right-column"><div className="curve-card"><div className="panel-title"><b>Equity curve ($)</b><span>Imported MT5 history</span></div><div className="curve-bars">{curve.slice(-48).map((value, index) => <i key={index} style={{ height: `${Math.max(5, ((value - chartMin) / spread) * 88)}%` }} />)}</div><div className="curve-labels"><span>{money(chartMin)}</span><span>{money(chartMax)}</span></div></div><div className="trades-card"><div className="panel-title"><b>Recent trades</b><a href="/sync">Resync</a></div><div className="trade-head"><span>Close date</span><span>Symbol</span><span>Net P&L</span></div>{[...deals].reverse().slice(0, 6).map((deal) => <div className="trade-row" key={deal.id}><span>{new Date(deal.occurred_at).toLocaleDateString()}</span><b>{deal.symbol}</b><strong className={net(deal) >= 0 ? "positive" : "negative"}>{money(net(deal))}</strong></div>)}</div></div></section></>}</div></main>;
 }
 
-function Metric({ label, value, good }: { label: string; value: string; good: boolean }) { return <article style={card}><p style={{ margin: 0, color: "#9995aa", fontSize: 13 }}>{label}</p><strong style={{ fontSize: 28, display: "block", marginTop: 9, color: good ? "#83e2a6" : "#f0a6b7" }}>{value}</strong></article>; }
+function DashMetric({ label, value, sub, good }: { label: string; value: string; sub: string; good: boolean }) { return <article className="dash-metric"><span>{label}</span><b>{value}</b><small className={good ? "positive" : "negative"}>{sub}</small></article>; }
