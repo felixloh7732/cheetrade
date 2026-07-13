@@ -28,6 +28,11 @@ const money = (value: number) =>
     currency: "USD",
     maximumFractionDigits: 2,
   }).format(value);
+const errorText = (error: unknown) => {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object" && "message" in error && typeof error.message === "string") return error.message;
+  return "Could not load your dashboard.";
+};
 
 export default function JournalPage() {
   const [client, setClient] = useState<SupabaseClient | null>(null);
@@ -37,6 +42,7 @@ export default function JournalPage() {
   const [account, setAccount] = useState<AccountSnapshot | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "signed-out" | "error">("loading");
   const [message, setMessage] = useState("");
+  const [liveMessage, setLiveMessage] = useState("");
   const [month, setMonth] = useState<Date | null>(null);
   const [range, setRange] = useState<Range>("ALL");
 
@@ -61,15 +67,19 @@ export default function JournalPage() {
             supabase.from("mt5_positions").select("id,ticket,symbol,side,volume,open_price,current_price,stop_loss,take_profit,profit,swap,opened_at,synced_at").order("opened_at", { ascending: true }),
             supabase.from("mt5_account_snapshots").select("balance,equity,margin,free_margin,currency,server,synced_at").maybeSingle(),
           ]);
-          const error = dealResult.error ?? positionResult.error ?? accountResult.error;
-          if (error) {
-            if (initial) throw error;
+          if (dealResult.error) {
+            if (initial) throw dealResult.error;
             return;
           }
           const loaded = (dealResult.data ?? []) as Deal[];
           setDeals(loaded);
-          setPositions((positionResult.data ?? []) as Position[]);
-          setAccount(accountResult.data as AccountSnapshot | null);
+          if (positionResult.error || accountResult.error) {
+            setLiveMessage("Live MT5 metrics are waiting for database access. Your closed-trade journal is still available.");
+          } else {
+            setPositions((positionResult.data ?? []) as Position[]);
+            setAccount(accountResult.data as AccountSnapshot | null);
+            setLiveMessage("");
+          }
           if (initial) setMonth(loaded.length ? new Date(loaded.at(-1)!.occurred_at) : new Date());
           setStatus("ready");
         };
@@ -77,7 +87,7 @@ export default function JournalPage() {
         timer = setInterval(() => void loadDashboard(), 5000);
       })
       .catch((error: unknown) => {
-        setMessage(error instanceof Error ? error.message : "Could not load your dashboard.");
+        setMessage(errorText(error));
         setStatus("error");
       });
     return () => { if (timer) clearInterval(timer); };
@@ -199,6 +209,7 @@ export default function JournalPage() {
 
         {status === "ready" && (deals.length > 0 || positions.length > 0 || account) && (
           <>
+            {liveMessage && <div className="live-warning">{liveMessage}</div>}
             <section className="live-account" aria-label="Live MT5 account">
               <div className="live-status"><i /><span><b>{account?.server ?? "XM MT5"}</b><small>{account ? `Live sync · ${new Date(account.synced_at).toLocaleTimeString()}` : "Waiting for live sync"}</small></span></div>
               <dl><div><dt>Balance</dt><dd>{account ? money(Number(account.balance)) : "—"}</dd></div><div><dt>Equity</dt><dd>{account ? money(Number(account.equity)) : "—"}</dd></div><div><dt>Floating P&amp;L</dt><dd className={positions.reduce((sum, position) => sum + Number(position.profit) + Number(position.swap), 0) >= 0 ? "positive" : "negative"}>{account ? money(positions.reduce((sum, position) => sum + Number(position.profit) + Number(position.swap), 0)) : "—"}</dd></div><div><dt>Open trades</dt><dd>{positions.length}</dd></div></dl>

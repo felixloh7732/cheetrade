@@ -27,6 +27,7 @@ using (user_id = auth.uid());
 
 grant usage on schema public to service_role;
 grant select, insert, update, delete on table public.mt5_deals to service_role;
+grant select on table public.mt5_deals to authenticated;
 
 create table if not exists public.mt5_positions (
   id uuid primary key default gen_random_uuid(),
@@ -55,6 +56,7 @@ on public.mt5_positions for select
 using (user_id = auth.uid());
 
 grant select, insert, update, delete on table public.mt5_positions to service_role;
+grant select on table public.mt5_positions to authenticated;
 
 create table if not exists public.mt5_account_snapshots (
   connection_id uuid primary key references public.mt5_connections(id) on delete cascade,
@@ -76,3 +78,4 @@ on public.mt5_account_snapshots for select
 using (user_id = auth.uid());
 
 grant select, insert, update, delete on table public.mt5_account_snapshots to service_role;
+grant select on table public.mt5_account_snapshots to authenticated;
