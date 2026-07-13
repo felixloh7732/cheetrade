@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { createClient } from "@supabase/supabase-js";
+import { useEffect, useState } from "react";
 
 const trades = [
   ["EURUSD", "Long", "+$184.20", "Today, 10:42", "up"],
@@ -12,6 +13,18 @@ const trades = [
 export default function Home() {
   const [connected, setConnected] = useState(false);
   const [range, setRange] = useState("30D");
+
+  useEffect(() => {
+    fetch("/api/config")
+      .then(async (response) => ({ ok: response.ok, body: await response.json() }))
+      .then(async ({ ok, body }) => {
+        if (!ok) return;
+        const supabase = createClient(body.url, body.key);
+        const { data } = await supabase.auth.getUser();
+        if (data.user) window.location.replace("/journal");
+      })
+      .catch(() => undefined);
+  }, []);
 
   return (
     <main>
