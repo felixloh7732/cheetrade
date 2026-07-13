@@ -69,8 +69,6 @@ const worker = {
         if (!brokerServer || !accountNumber || !investorPassword) return json({ error: "Complete all three MT5 fields." }, 400);
         const encrypted = await encryptPassword(investorPassword, encryptionKey);
         const headers = { apikey: serviceKey, authorization: `Bearer ${serviceKey}`, "content-type": "application/json", prefer: "return=minimal" };
-        const profile = await fetch(`${env.SUPABASE_URL}/rest/v1/profiles?on_conflict=id`, { method: "POST", headers: { ...headers, prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify({ id: user.id, display_name: user.email?.split("@")[0] ?? "Trader" }) });
-        if (!profile.ok) throw new Error("Your journal profile could not be prepared.");
         const saved = await fetch(`${env.SUPABASE_URL}/rest/v1/mt5_connections`, { method: "POST", headers, body: JSON.stringify({ user_id: user.id, broker_server: brokerServer, account_number: accountNumber, credential_ciphertext: encrypted.cipher, credential_nonce: encrypted.nonce, status: "pending" }) });
         if (!saved.ok) throw new Error("The encrypted connection could not be saved.");
         return json({ ok: true });
