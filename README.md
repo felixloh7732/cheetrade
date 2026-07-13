@@ -1,4 +1,26 @@
-# vinext-starter
+# Cheetrade
+
+Cheetrade is a read-only XM MetaTrader 5 journal. A local Python helper reads the
+already-open MT5 terminal and sends closed deals, open positions, and account
+equity to Supabase through the Cloudflare Worker. The helper never imports or
+calls an MT5 trading command.
+
+## Live MT5 sync
+
+1. Run `supabase/mt5_importer.sql` in the Supabase SQL editor. This creates the
+   deal, live-position, and account-snapshot tables with per-user read policies.
+2. Sign in to Cheetrade and open `/sync` to download `config.json`.
+3. Put that file beside `mt5-sync/sync_mt5.py`.
+4. Install the desktop requirements once: `pip install MetaTrader5 requests`.
+5. Open XM MT5, sign in, then run `python sync_mt5.py`.
+
+The helper sends a read-only snapshot every 10 seconds. The journal checks for
+updates every 5 seconds, so entries, floating P&L, equity, and closed trades
+usually appear within 15 seconds. Keep both XM MT5 and the helper running for
+live updates. Set `"poll_seconds"` in `config.json` to change the helper interval
+(minimum 5 seconds), or set `"run_once": true` for a one-time import.
+
+## Web app
 
 A clean full-stack starter running on
 [vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and

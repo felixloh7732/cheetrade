@@ -124,10 +124,16 @@ const worker = {
         if (!env.SUPABASE_URL || !serviceKey || !encryptionKey) return json({ error: "Cheetrade is not configured." }, 503);
         const userId = await importTokenUser(token, encryptionKey);
         if (!userId) return json({ error: "Invalid desktop import code." }, 401);
-        const payload = await request.json() as { accountNumber?: string; deals?: Array<Record<string, unknown>> };
+        const payload = await request.json() as {
+          accountNumber?: string;
+          deals?: Array<Record<string, unknown>>;
+          positions?: Array<Record<string, unknown>>;
+          account?: Record<string, unknown>;
+        };
         const accountNumber = payload.accountNumber?.trim();
-        const deals = payload.deals;
-        if (!accountNumber || !Array.isArray(deals) || deals.length === 0 || deals.length > 500) return json({ error: "Send 1 to 500 closed MT5 deals at a time." }, 400);
+        const deals = payload.deals ?? [];
+        const positions = payload.positions;
+        if (!accountNumber || !Array.isArray(deals) || deals.length > 500 || (positions !== undefined && (!Array.isArray(positions) || positions.length > 500))) return json({ error: "Send a valid MT5 snapshot with at most 500 deals and 500 positions." }, 400);
         const query = new URLSearchParams({ select: "id", user_id: `eq.${userId}`, account_number: `eq.${accountNumber}`, limit: "1" });
         const connection = await fetch(`${env.SUPABASE_URL}/rest/v1/mt5_connections?${query}`, { headers: { apikey: serviceKey, authorization: `Bearer ${serviceKey}` } });
         const connections = await connection.json().catch(() => []) as Array<{ id: string }>;
@@ -137,9 +143,38 @@ const worker = {
           volume: Number(deal.volume ?? 0), price: Number(deal.price ?? 0), profit: Number(deal.profit ?? 0), commission: Number(deal.commission ?? 0), swap: Number(deal.swap ?? 0), fee: Number(deal.fee ?? 0), occurred_at: String(deal.occurredAt ?? ""), raw_data: deal.raw ?? {},
         }));
         if (rows.some((row) => !row.ticket || !row.symbol || !row.side || !row.occurred_at || !Number.isFinite(row.profit))) return json({ error: "The desktop helper sent an invalid MT5 deal." }, 400);
-        const saved = await fetch(`${env.SUPABASE_URL}/rest/v1/mt5_deals?on_conflict=connection_id,ticket`, { method: "POST", headers: { apikey: serviceKey, authorization: `Bearer ${serviceKey}`, "content-type": "application/json", prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(rows) });
-        if (!saved.ok) { const failure = await saved.json().catch(() => ({})) as { message?: string }; throw new Error(failure.message ?? "MT5 deals could not be saved."); }
-        return json({ ok: true, imported: rows.length });
+        const serviceHeaders = { apikey: serviceKey, authorization: `Bearer ${serviceKey}`, "content-type": "application/json" };
+        if (rows.length) {
+          const saved = await fetch(`${env.SUPABASE_URL}/rest/v1/mt5_deals?on_conflict=connection_id,ticket`, { method: "POST", headers: { ...serviceHeaders, prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(rows) });
+          if (!saved.ok) { const failure = await saved.json().catch(() => ({})) as { message?: string }; throw new Error(failure.message ?? "MT5 deals could not be saved."); }
+        }
+
+        if (positions !== undefined) {
+          const positionRows = positions.map((position) => ({
+            connection_id: connections[0].id, user_id: userId, ticket: String(position.ticket ?? ""), symbol: String(position.symbol ?? ""), side: String(position.side ?? ""),
+            volume: Number(position.volume ?? 0), open_price: Number(position.openPrice ?? 0), current_price: Number(position.currentPrice ?? 0), stop_loss: Number(position.stopLoss ?? 0),
+            take_profit: Number(position.takeProfit ?? 0), profit: Number(position.profit ?? 0), swap: Number(position.swap ?? 0), opened_at: String(position.openedAt ?? ""), synced_at: new Date().toISOString(),
+          }));
+          if (positionRows.some((row) => !row.ticket || !row.symbol || !row.side || !row.opened_at || !Number.isFinite(row.profit))) return json({ error: "The desktop helper sent an invalid open position." }, 400);
+          const remove = await fetch(`${env.SUPABASE_URL}/rest/v1/mt5_positions?connection_id=eq.${connections[0].id}`, { method: "DELETE", headers: serviceHeaders });
+          if (!remove.ok) throw new Error("The previous open-position snapshot could not be replaced.");
+          if (positionRows.length) {
+            const savedPositions = await fetch(`${env.SUPABASE_URL}/rest/v1/mt5_positions`, { method: "POST", headers: { ...serviceHeaders, prefer: "return=minimal" }, body: JSON.stringify(positionRows) });
+            if (!savedPositions.ok) { const failure = await savedPositions.json().catch(() => ({})) as { message?: string }; throw new Error(failure.message ?? "Open MT5 positions could not be saved."); }
+          }
+        }
+
+        if (payload.account) {
+          const account = payload.account;
+          const snapshot = {
+            connection_id: connections[0].id, user_id: userId, balance: Number(account.balance ?? 0), equity: Number(account.equity ?? 0), margin: Number(account.margin ?? 0),
+            free_margin: Number(account.freeMargin ?? 0), currency: String(account.currency ?? "USD"), server: String(account.server ?? ""), synced_at: new Date().toISOString(),
+          };
+          const savedAccount = await fetch(`${env.SUPABASE_URL}/rest/v1/mt5_account_snapshots?on_conflict=connection_id`, { method: "POST", headers: { ...serviceHeaders, prefer: "resolution=merge-duplicates,return=minimal" }, body: JSON.stringify(snapshot) });
+          if (!savedAccount.ok) throw new Error("The MT5 account snapshot could not be saved.");
+        }
+
+        return json({ ok: true, imported: rows.length, openPositions: positions?.length ?? null });
       } catch (error) {
         return json({ error: error instanceof Error ? error.message : "Unexpected import error" }, 500);
       }
