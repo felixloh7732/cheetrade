@@ -92,8 +92,8 @@ const worker = {
         const brokerServer = payload.brokerServer?.trim(), accountNumber = payload.accountNumber?.trim(), investorPassword = payload.investorPassword?.trim();
         if (!brokerServer || !accountNumber || !investorPassword) return json({ error: "Complete all three MT5 fields." }, 400);
         const encrypted = await encryptPassword(investorPassword, encryptionKey);
-        const headers = { apikey: serviceKey, authorization: `Bearer ${serviceKey}`, "content-type": "application/json", prefer: "return=minimal" };
-        const saved = await fetch(`${env.SUPABASE_URL}/rest/v1/mt5_connections`, { method: "POST", headers, body: JSON.stringify({ user_id: user.id, broker_server: brokerServer, account_number: accountNumber, credential_ciphertext: encrypted.cipher, credential_nonce: encrypted.nonce, status: "pending" }) });
+        const headers = { apikey: serviceKey, authorization: `Bearer ${serviceKey}`, "content-type": "application/json", prefer: "resolution=merge-duplicates,return=minimal" };
+        const saved = await fetch(`${env.SUPABASE_URL}/rest/v1/mt5_connections?on_conflict=user_id,broker_server,account_number`, { method: "POST", headers, body: JSON.stringify({ user_id: user.id, broker_server: brokerServer, account_number: accountNumber, credential_ciphertext: encrypted.cipher, credential_nonce: encrypted.nonce, status: "pending" }) });
         if (!saved.ok) {
           const failure = await saved.json().catch(() => ({})) as { message?: string; code?: string };
           console.error("MT5 connection save rejected", saved.status, failure.code, failure.message);
