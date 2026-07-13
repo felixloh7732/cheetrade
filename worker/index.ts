@@ -70,7 +70,11 @@ const worker = {
         const encrypted = await encryptPassword(investorPassword, encryptionKey);
         const headers = { apikey: serviceKey, authorization: `Bearer ${serviceKey}`, "content-type": "application/json", prefer: "return=minimal" };
         const saved = await fetch(`${env.SUPABASE_URL}/rest/v1/mt5_connections`, { method: "POST", headers, body: JSON.stringify({ user_id: user.id, broker_server: brokerServer, account_number: accountNumber, credential_ciphertext: encrypted.cipher, credential_nonce: encrypted.nonce, status: "pending" }) });
-        if (!saved.ok) throw new Error("The encrypted connection could not be saved.");
+        if (!saved.ok) {
+          const failure = await saved.json().catch(() => ({})) as { message?: string; code?: string };
+          console.error("MT5 connection save rejected", saved.status, failure.code, failure.message);
+          throw new Error(`The database rejected the encrypted connection (${failure.code ?? saved.status}): ${failure.message ?? "unknown reason"}`);
+        }
         return json({ ok: true });
       } catch (error) {
         return json({ error: error instanceof Error ? error.message : "Unexpected error" }, 500);
