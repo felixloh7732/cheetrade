@@ -21,7 +21,8 @@ type AccountSnapshot = { balance: number; equity: number; margin: number; free_m
 
 const net = (deal: Deal) =>
   Number(deal.profit) + Number(deal.commission) + Number(deal.swap) + Number(deal.fee);
-const dateKey = (date: Date) => date.toISOString().slice(0, 10);
+const dateKey = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 const money = (value: number) =>
   new Intl.NumberFormat("en-US", {
     style: "currency",

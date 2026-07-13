@@ -44,7 +44,9 @@ headers = {"content-type": "application/json", "x-cheetrade-import-token": impor
 
 
 def closed_deals(since):
-    history = mt5.history_deals_get(since, datetime.now(timezone.utc))
+    # The MT5 Python bridge expects local datetime values for history filters.
+    # Deal timestamps returned by MT5 are still Unix/UTC and are encoded as UTC below.
+    history = mt5.history_deals_get(since, datetime.now())
     if history is None:
         raise RuntimeError(f"Could not read MT5 history: {mt5.last_error()}")
     return [
@@ -129,7 +131,7 @@ first_sync = True
 try:
     while True:
         try:
-            since = datetime.now(timezone.utc) - timedelta(days=3650 if first_sync else 7)
+            since = datetime.now() - timedelta(days=3650 if first_sync else 7)
             imported, position_count, snapshot = upload(since)
             timestamp = datetime.now().strftime("%H:%M:%S")
             print(f"[{timestamp}] synced {imported} closed deals · {position_count} open positions · equity {snapshot['equity']:.2f} {snapshot['currency']}")
