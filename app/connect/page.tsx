@@ -1,0 +1,38 @@
+"use client";
+
+import { FormEvent, useEffect, useState } from "react";
+import { createClient, SupabaseClient, User } from "@supabase/supabase-js";
+
+const card: React.CSSProperties = { width: "min(520px, 100%)", margin: "72px auto", padding: 32, background: "#181725", border: "1px solid #3b3855", borderRadius: 16, boxShadow: "0 24px 80px #000" };
+const input: React.CSSProperties = { width: "100%", marginTop: 7, padding: "13px 14px", background: "#100f1b", border: "1px solid #3b3855", borderRadius: 8, color: "white" };
+const button: React.CSSProperties = { width: "100%", marginTop: 20, padding: 14, border: 0, borderRadius: 9, background: "#a5a2ff", color: "#17152a", fontWeight: 800, cursor: "pointer" };
+
+export default function ConnectPage() {
+  const [client, setClient] = useState<SupabaseClient | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => { fetch("/api/config").then((r) => r.ok ? r.json() : null).then((config) => {
+    if (!config) return setMessage("Cheetrade is still being configured. Please try again shortly.");
+    const supabase = createClient(config.url, config.key); setClient(supabase);
+    supabase.auth.getUser().then(({ data }) => setUser(data.user));
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => setUser(session?.user ?? null));
+    return () => subscription.subscription.unsubscribe();
+  }).catch(() => setMessage("Could not start secure sign-in.")); }, []);
+
+  async function signIn(event: FormEvent) {
+    event.preventDefault(); if (!client) return; setBusy(true); setMessage("");
+    const { error } = await client.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin + "/connect" } });
+    setBusy(false); setMessage(error ? error.message : "Check your email for your secure Cheetrade sign-in link.");
+  }
+  async function connect(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (!client) return; const session = (await client.auth.getSession()).data.session;
+    if (!session) return setMessage("Your session expired. Please sign in again.");
+    const data = new FormData(event.currentTarget); setBusy(true); setMessage("");
+    const response = await fetch("/api/mt5/connect", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${session.access_token}` }, body: JSON.stringify({ brokerServer: data.get("server"), accountNumber: data.get("account"), investorPassword: data.get("password") }) });
+    const result = await response.json(); setBusy(false); setMessage(response.ok ? "Connection saved. Trade sync will begin when the MT5 importer is activated." : result.error ?? "Could not save the connection.");
+  }
+  return <main style={{ minHeight: "100vh", padding: "1px 24px", background: "radial-gradient(circle at 80% 10%,#302b71,transparent 34%),#0c0b14" }}><div style={card}><a href="/" style={{ color: "#b9b7ff", textDecoration: "none", fontWeight: 700 }}>← cheetrade</a><p style={{ color: "#b9b7ff", fontSize: 11, letterSpacing: 1.5, fontWeight: 800, marginTop: 35 }}>READ-ONLY MT5 JOURNAL</p><h1 style={{ fontSize: 38, letterSpacing: -1.8, margin: "8px 0" }}>Connect your account.</h1><p style={{ color: "#b0aec0", lineHeight: 1.55 }}>Cheetrade uses Investor Password access only. It cannot place, modify, or close trades.</p>{!user ? <form onSubmit={signIn}><label>Email address<input style={input} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required /></label><button style={button} disabled={busy}>{busy ? "Sending…" : "Send secure sign-in link"}</button></form> : <form onSubmit={connect}><p style={{ color: "#83e2a6", fontSize: 13 }}>Signed in as {user.email}</p><label>Broker server<input style={input} name="server" placeholder="XMGlobal-MT5 2" required /></label><br /><label>MT5 account number<input style={input} name="account" inputMode="numeric" placeholder="12345678" required /></label><br /><label>Investor Password<input style={input} name="password" type="password" autoComplete="new-password" required /></label><button style={button} disabled={busy}>{busy ? "Encrypting…" : "Save read-only connection"}</button></form>}<p style={{ color: "#9995aa", fontSize: 12, lineHeight: 1.5, marginTop: 20 }}>Credentials are encrypted before storage. You can disconnect your account at any time.</p>{message && <p style={{ color: "#c7c4ff", fontSize: 13, lineHeight: 1.45 }}>{message}</p>}</div></main>;
+}

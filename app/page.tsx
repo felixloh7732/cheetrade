@@ -26,7 +26,7 @@ export default function Home() {
           <h1>Your trades,<br /><em>finally in focus.</em></h1>
           <p>Cheetrade turns your MT5 history into a calm, clear trading journal—so you can see the habits behind every result.</p>
           <div className="hero-actions">
-            <button className="primary" onClick={() => setConnected(true)}>{connected ? "MT5 account connected ✓" : "Connect MT5 account"}</button>
+            <a className="primary" href="/connect">{connected ? "MT5 account connected ✓" : "Connect MT5 account"}</a>
             <a className="text-link" href="#product">Explore the journal <b>→</b></a>
           </div>
           <small>Read-only access · No trades can be placed from Cheetrade</small>
@@ -48,7 +48,7 @@ export default function Home() {
       </section>
 
       <section className="features shell" id="how"><span className="kicker">BUILT FOR REFLECTION</span><h2>Better data. Better decisions.</h2><div className="feature-grid"><Feature n="01" title="Automatic MT5 imports" text="Connect once. New closed trades and balances arrive in your journal automatically."/><Feature n="02" title="A journal with memory" text="Add notes, screenshots, tags and strategies while the reason behind each trade is fresh."/><Feature n="03" title="Patterns that matter" text="Understand performance by session, instrument, direction and strategy—not just a total P&L."/></div></section>
-      <section className="cta" id="pricing"><div className="shell"><span className="kicker">START CLEARER</span><h2>Your next trading review<br />starts here.</h2><p>Create your private journal and connect an MT5 account when you&apos;re ready.</p><button className="primary" onClick={() => setConnected(true)}>{connected ? "You’re ready to review" : "Start your journal"}</button></div></section>
+      <section className="cta" id="pricing"><div className="shell"><span className="kicker">START CLEARER</span><h2>Your next trading review<br />starts here.</h2><p>Create your private journal and connect an MT5 account when you&apos;re ready.</p><a className="primary" href="/connect">{connected ? "You’re ready to review" : "Start your journal"}</a></div></section>
       <footer className="shell"><a className="brand" href="#top"><span>c</span>cheetrade</a><p>© 2026 Cheetrade. Analytics only. No trade execution.</p><div><a>Privacy</a><a>Terms</a><a>Support</a></div></footer>
     </main>
   );
